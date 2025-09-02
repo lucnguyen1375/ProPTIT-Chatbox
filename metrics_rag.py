@@ -44,7 +44,7 @@ Yêu cầu bắt buộc:
 
 
 def embedding_file(file_train_data_proptit, embedding, vector_db, k):
-    df_train = pd.read_excel(file_train_data_proptit).head(10)
+    df_train = pd.read_excel(file_train_data_proptit)
     result_list = []
     df_train['User embedding'] = None
     df_train['Information'] = None
@@ -54,9 +54,11 @@ def embedding_file(file_train_data_proptit, embedding, vector_db, k):
         ground_truth_doc = row['Ground truth document']
         # Tạo embedding cho câu hỏi của người dùng
         user_embedding = embedding.encode(query)
+
         df_train.at[index, 'User embedding'] = user_embedding
         # Tìm kiếm thông tin liên quan trong cơ sở dữ liệu
-        results = vector_db.query("information", user_embedding, limit = k + 5)  # Lấy nhiều hơn k để rerank
+        results = vector_db.query("information", user_embedding, limit = k + 5) # Lấy nhiều hơn k để rerank
+        
         # retrieved_docs = [int(result['title'].split()[-1]) for result in results if 'title' in result]    
         retrieved_docs = []
         
@@ -386,6 +388,8 @@ def context_entities_recall_k(file_clb_proptit, df_train, embedding, vector_db, 
                 "role": "system",
                 "content": """Bạn là một trợ lý AI chuyên trích xuất các thực thể từ câu trả lời. Bạn sẽ được cung cấp một câu trả lời và nhiệm vụ của bạn là trích xuất các thực thể từ câu trả lời đó. Các thực thể có thể là tên người, địa điểm, tổ chức, sự kiện, v.v. Hãy trả lời dưới dạng một danh sách các thực thể.
                 Yêu cầu bắt buộc: Chỉ trả lời dưới dạng một danh sách các thực thể, không giải thích gì thêm.
+                Yêu cầu băt buộc: Các thực thể phải là các từ hoặc cụm từ có ý nghĩa, không bao gồm các từ dừng (stop words) như "là", "và", "của", v.v.
+                Yêu cầu bắt buộc: Output phải là một list, ví dụ: ["thực thể 1", "thực thể 2", "thực thể 3"], và chuỗi đó phải eval được 
                 Ví dụ:
                 Câu trả lời: Nếu bạn thuộc ngành khác bạn vẫn có thể tham gia CLB chúng mình. Nếu định hướng của bạn hoàn toàn là theo CNTT thì CLB chắc chắn là nơi phù hợp nhất để các bạn phát triển. Trở ngại lớn nhất sẽ là do bạn theo một hướng khác nữa nên sẽ phải tập trung vào cả 2 mảng nên sẽ cần cố gắng nhiều hơn.
                 ["ngành khác", "CLB", "CNTT", "mảng]
@@ -777,6 +781,7 @@ def generate_related_questions(response):
         {
             "role": "system",
             "content": """Bạn là một trợ lý AI chuyên tạo ra các câu hỏi liên quan từ một câu trả lời. Bạn sẽ được cung cấp một câu trả lời và nhiệm vụ của bạn là tạo ra các câu hỏi liên quan đến câu trả lời đó. Hãy tạo ra ít nhất 5 câu hỏi liên quan, mỗi câu hỏi nên ngắn gọn và rõ ràng. Trả lời dưới dạng list các câu hỏi như ở ví dụ dưới. LƯU Ý: Trả lời dưới dạng ["câu hỏi 1", "câu hỏi 2", "câu hỏi 3", ...], bao gồm cả dấu ngoặc vuông.
+            Yêu cầu: Trong các câu hỏi không được chứa các kí tự đặc biệt làm cho câu hỏi không dùng hàm eval để trích xuất ra các thực thể được.
             Ví dụ:
             Câu trả lời: Câu lạc bộ Lập Trình PTIT (Programming PTIT), tên viết tắt là PROPTIT được thành lập ngày 9/10/2011. Với phương châm hoạt động "Chia sẻ để cùng nhau phát triển", câu lạc bộ là nơi giao lưu, đào tạo các môn lập trình và các môn học trong trường, tạo điều kiện để sinh viên trong Học viện có môi trường học tập năng động sáng tạo. Slogan: Lập Trình PTIT - Lập trình từ trái tim.
             Output của bạn: "["CLB Lập Trình PTIT được thành lập khi nào?", "Slogan của CLB là gì?", "Mục tiêu của CLB là gì?"]"
@@ -822,7 +827,6 @@ def response_relevancy_k(file_clb_proptit, df_train, embedding, vector_db, k=5):
     4. Tuyệt đối không suy đoán hoặc bịa thông tin.
     5. Giữ phong cách trả lời thân thiện, chuyên nghiệp và nhất quán.
     6. Trong context có thể chứa nhiều thông tin khác nhau, hãy tập trung vào câu hỏi của người dùng để trả lời chính xác nhất.
-
     Nhiệm vụ của bạn:
     - Trả lời các câu hỏi về CLB Lập trình ProPTIT: lịch sử, thành viên, hoạt động, sự kiện, dự án, nội quy, thành viên tiêu biểu, và các thông tin liên quan khác.
     """
@@ -987,3 +991,103 @@ def calculate_metrics_llm_answer(file_clb_proptit, file_train, embedding, vector
         metrics_df.to_csv("metrics_llm_answer_test.csv", index=False)
     return metrics_df
 
+def calculate_all_metrics(file_clb_proptit, file_train, embedding, vector_db, train):
+    # Tạo ra 1 bảng csv, cột thứ nhất là K value, các cột còn lại là metrics. Sẽ có 3 hàng tương trưng với k = 3, 5, 7
+    k_values = [7]
+    retrieval_metrics = {
+        "K": [],
+        "hit@k": [],
+        "recall@k": [],
+        "precision@k": [],
+        "f1@k": [],
+        "map@k": [],
+        "mrr@k": [],
+        "ndcg@k": [],
+        "context_precision@k": [],
+        "context_recall@k": [],
+        "context_entities_recall@k": []
+    }
+    
+    llm_metrics = {
+        "K": [],
+        "string_presence@k": [],
+        "rouge_l@k": [],
+        "bleu_4@k": [],
+        "groundedness@k": [],
+        "response_relevancy@k": [],
+        "noise_sensitivity@k": []
+    }
+    # Lưu 2 chữ số thập phân cho các metrics
+    for k in k_values:
+        print(f"Calculating metrics for k={k}...", end = ' ')
+        print("Creating embeddings and retrieving documents...")
+        df_train=embedding_file(file_train, embedding, vector_db, k)
+    
+        # print(f'Calculating retrieval metrics for k={k}...')
+        # retrieval_metrics["K"].append(k)
+        # print("Creating embeddings and retrieving documents...")
+        # print("Calculating hit@k...", end = ' ')
+        # retrieval_metrics["hit@k"].append(round(hit_k(file_clb_proptit, df_train, embedding, vector_db, k), 2))
+        # print(retrieval_metrics["hit@k"][-1])
+        # print("Calculating recall@k...", end = ' ')
+        # retrieval_metrics["recall@k"].append(round(recall_k(file_clb_proptit, df_train, embedding, vector_db, k), 2))
+        # print(retrieval_metrics["recall@k"][-1])
+        # print("Calculating precision@k...", end = ' ')
+        # retrieval_metrics["precision@k"].append(round(precision_k(file_clb_proptit, df_train, embedding, vector_db, k), 2))
+        # print(retrieval_metrics["precision@k"][-1])
+        # print("Calculating f1@k...", end = ' ')
+        # retrieval_metrics["f1@k"].append(round(f1_k(file_clb_proptit, df_train, embedding, vector_db, k), 2))
+        # print(retrieval_metrics["f1@k"][-1])
+        # print("Calculating map@k...", end = ' ')
+        # retrieval_metrics["map@k"].append(round(map_k(file_clb_proptit, df_train, embedding, vector_db, k), 2))
+        # print(retrieval_metrics["map@k"][-1])
+        # print("Calculating mrr@k...", end = ' ')
+        # retrieval_metrics["mrr@k"].append(round(mrr_k(file_clb_proptit, df_train, embedding, vector_db, k), 2))
+        # print(retrieval_metrics["mrr@k"][-1])
+        # print("Calculating ndcg@k...", end = ' ')
+        # retrieval_metrics["ndcg@k"].append(round(ndcg_k(file_clb_proptit, df_train, embedding, vector_db, k), 2))
+        # print(retrieval_metrics["ndcg@k"][-1])
+        # print("Calculating context_precision@k...", end = ' ')
+        # retrieval_metrics["context_precision@k"].append(round(context_precision_k(file_clb_proptit, df_train, embedding, vector_db, k), 2))
+        # print(retrieval_metrics["context_precision@k"][-1])
+        # print("Calculating context_recall@k...", end = ' ')
+        # retrieval_metrics["context_recall@k"].append(round(context_recall_k(file_clb_proptit, df_train, embedding, vector_db, k), 2))
+        # print(retrieval_metrics["context_recall@k"][-1])
+        print("Calculating context_entities_recall@k...", end = ' ')
+        retrieval_metrics["context_entities_recall@k"].append(round(context_entities_recall_k(file_clb_proptit, df_train, embedding, vector_db, k), 2))
+        print(retrieval_metrics["context_entities_recall@k"][-1])
+        
+        print('-'*20)
+        print(f'Calculating LLM answer metrics for k={k}...')
+        llm_metrics["K"].append(k)
+        print("Calculating string_presence@k...", end = ' ')
+        llm_metrics["string_presence@k"].append(round(string_presence_k(file_clb_proptit, df_train, embedding, vector_db, k), 2))
+        print(llm_metrics["string_presence@k"][-1])
+        print("Calculating rouge_l@k...", end = ' ')
+        llm_metrics["rouge_l@k"].append(round(rouge_l_k(file_clb_proptit, df_train, embedding, vector_db, k), 2))
+        print(llm_metrics["rouge_l@k"][-1])
+        print("Calculating bleu_4@k...", end = ' ')
+        llm_metrics["bleu_4@k"].append(round(bleu_4_k(file_clb_proptit, df_train, embedding, vector_db, k), 2))
+        print(llm_metrics["bleu_4@k"][-1])
+        print("Calculating groundedness@k...", end = ' ')
+        llm_metrics["groundedness@k"].append(round(groundedness_k(file_clb_proptit, df_train, embedding, vector_db, k), 2))
+        print(llm_metrics["groundedness@k"][-1])
+        print("Calculating response_relevancy@k...", end = ' ')
+        llm_metrics["response_relevancy@k"].append(round(response_relevancy_k(file_clb_proptit, df_train, embedding, vector_db, k), 2))
+        print(llm_metrics["response_relevancy@k"][-1])
+        print("Calculating noise_sensitivity@k...", end = ' ')
+        llm_metrics["noise_sensitivity@k"].append(round(noise_sensitivity_k(file_clb_proptit, df_train, embedding, vector_db, k), 2))
+        print(llm_metrics["noise_sensitivity@k"][-1])
+        print('-'*20)
+    # Chuyển đổi metrics thành DataFrame
+    
+    retrieval_metrics_df = pd.DataFrame(retrieval_metrics)
+    llm_metrics_df = pd.DataFrame(llm_metrics)
+    # Lưu DataFrame vào file csv
+    # if train:
+    #     retrieval_metrics_df.to_csv("metrics_retrieval_train.csv", index=False)
+    #     llm_metrics_df.to_csv("metrics_llm_answer_train.csv", index=False)
+    # else:
+    #     retrieval_metrics_df.to_csv("metrics_retrieval_test.csv", index=False)
+    #     llm_metrics_df.to_csv("metrics_llm_answer_test.csv", index=False)
+    return retrieval_metrics_df, llm_metrics_df

@@ -27,18 +27,31 @@ logger = logging.getLogger(__name__)
 APP_NAME = "story_app"
 USER_ID = "12345"
 SESSION_ID = "123344"   
-GEMINI_2_FLASH = "gemini-1.5-flash"
+GEMINI_2_FLASH = "gemini-2.0-flash"
 
 general_agent = LlmAgent(
     name="ChitChat_Agent",
     model=GEMINI_2_FLASH,
     instruction="""
-    You are a friendly AI assistant. Engage in casual conversation with the user. user_input is stored in {{user_input}}. You can use {{last_conversation}} to have a more friendly answer",
+    You are ProPTIT's AI assistant. ProPTIT is the Programming Club of PTIT (Posts and Telecommunications Institute of Technology), a prestigious university in Vietnam specializing in IT and telecommunications.
+    {{last_conversation}} is important.
+    You are a friendly AI assistant. Engage in casual conversation with the user. user_input is stored in {{user_input}}. You need to use {{last_conversation}} to have a more friendly answer",
     You should use Vietnamese in your answers, except when the user asks you to use English.
     """
 )
 
-
+rewrite_agent = LlmAgent(
+    name="Rewrite_Agent",
+    model=GEMINI_2_FLASH,
+    instruction="""
+    You are an agent that rewrites the user's query to be more specific and clear.
+    You need to read input in {{user_input}} and some last conversations in {{last_conversation}} to rewrite the question.
+    Typically, questions and answers that are more relevant to the user's current question should be given priority, so please prioritize those accordingly.
+    The rewritten question should be clear and specific, making it easier to retrieve relevant documents from a knowledge base.
+    Your output must be a clear and specific question that can be used to retrieve relevant documents from a knowledge base.
+    """,
+    output_key = "rewritten_query"
+)
 
 answer_generator = LlmAgent(
     name="Answer_Generator",
@@ -46,6 +59,7 @@ answer_generator = LlmAgent(
     instruction="""You are a member of ProPTIT,
     Your task is to answer the question based on the provided context.
     Your must use the provided context from the {{retrieved_docs}} to answer the question.
+    You are trusted to provide accurate information about ProPTIT.
     Don't use any other information.
     If you can't find the answer in the context, say "I don't know".
     Note: The context is provided in Vietnamese, so please answer in Vietnamese as well, convert to pretty format.
@@ -70,7 +84,8 @@ rag_agent = RAG_Agent(
     name = "RAG_Agent", 
     router_agent=router_agent,
     answer_generator=answer_generator,
-    general_agent=general_agent
+    general_agent=general_agent,
+    rewrite_agent=rewrite_agent
 )   
 
     

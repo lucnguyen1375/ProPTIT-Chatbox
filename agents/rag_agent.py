@@ -18,19 +18,18 @@ import logging
 from typing_extensions import override
 import asyncio
 from time import sleep
+import openai
 logger = logging.getLogger(__name__)
 
 class RAG_Agent(BaseAgent):
     answer_generator : LlmAgent
     general_agent: LlmAgent
     router_agent: LlmAgent
-    
+    rewrite_agent: LlmAgent
     def vector_query(tool_context: ToolContext, query_vector: list)-> list:
-        # print('*'*50)
         logger.info('VECTOR QUERY FUNCTION CALLED')
-        # print('*'*50)
         collection_name = 'information'
-        top_k = 5
+        top_k = 10
         client = MongoClient(os.getenv("MONGODB_URI"))
         db = client.get_database("vector_db")
         collection = db[collection_name]
@@ -57,13 +56,12 @@ class RAG_Agent(BaseAgent):
 
     def embedding(tool_context: ToolContext, text : str) -> list:
         logger.info('EMBEDDING FUNCTION CALLED')
-        client = genai.Client(
-            api_key=os.getenv("GEMINI_API_KEY")
+        client = openai.Client(api_key=os.getenv("OPENAI_API_KEY"))
+        response = client.embeddings.create(
+            input=text,
+            model="text-embedding-3-large"
         )
-        embedded_query = client.models.embed_content(
-            model="gemini-embedding-001",
-            contents=text,
-        ).embeddings[0].values
+        embedded_query = response.data[0].embedding
         return embedded_query
     
     def __init__(
@@ -72,12 +70,14 @@ class RAG_Agent(BaseAgent):
         router_agent: LlmAgent,
         answer_generator: LlmAgent,
         general_agent: LlmAgent,
+        rewrite_agent: LlmAgent
     ):
         super().__init__(
             name=name,
             router_agent=router_agent,
             answer_generator=answer_generator,
-            general_agent=general_agent             
+            general_agent=general_agent   ,
+            rewrite_agent=rewrite_agent          
         )
         
         
@@ -85,7 +85,6 @@ class RAG_Agent(BaseAgent):
     async def _run_async_impl(self, ctx : InvocationContext) -> AsyncGenerator[Event, None]:
         logger.info(f"RAG Agent {self.name} started.")
         logger.info(f"Session state at start: {ctx.session.state}")
-        
         user_input = ctx.session.state.get("user_input", "")
         route_decision = "general"  # Mặc định là general nếu không có quyết định nào được đưa ra
         async for event in self.router_agent.run_async(ctx):
@@ -96,10 +95,14 @@ class RAG_Agent(BaseAgent):
         
         
         if route_decision == "rag":
-            # query transform 
-            
+            rewritten_query = ""
+            async for event in self.rewrite_agent.run_async(ctx):
+                if event.is_final_response() and event.content and event.content.parts:
+                    rewritten_query = event.content.parts[0].text.strip()
+                    logger.info(f"Rewritten query: {rewritten_query}")
+                    
             # embed
-            embedded_query = self.embedding(text = user_input)
+            embedded_query = self.embedding(text = rewritten_query)
             # logger.info(f"Embedded query: {embedded_query}")
             ctx.session.state['embedded_query'] = embedded_query
             

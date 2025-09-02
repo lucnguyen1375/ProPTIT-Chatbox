@@ -200,3 +200,70 @@ class VectorDatabase:
             self.client.table(collection_name).delete().execute()
         else:
             raise ValueError("Unsupported database type for drop_collection")
+        
+# Hàm tính toán tất cả metrics liên quan đến Retrieval
+
+def calculate_metrics_retrieval(file_clb_proptit, file_train , embedding, vector_db, train):
+    # Tạo ra 1 bảng csv, cột thứ nhất là K value, các cột còn lại là metrics. Sẽ có 3 hàng tương trưng với k = 3, 5, 7
+    k_values = [3, 5, 7]
+    metrics = {
+        "K": [],
+        "hit@k": [],
+        "recall@k": [],
+        "precision@k": [],
+        "f1@k": [],
+        "map@k": [],
+        "mrr@k": [],
+        "ndcg@k": [],
+        "context_precision@k": [],
+        "context_recall@k": [],
+        "context_entities_recall@k": []
+    }
+    
+    print('CACULATING METRICS RETRIEVAL...')
+    # Lưu 2 chữ số thập phân cho các metrics
+    for k in k_values:
+        print(f"Calculating metrics retrieval for k={k}...", end = ' ')
+        metrics["K"].append(k)
+        print("Creating embeddings and retrieving documents...")
+        df_train=embedding_file(file_train, embedding, vector_db, k)
+        print("Calculating hit@k...", end = ' ')
+        metrics["hit@k"].append(round(hit_k(file_clb_proptit, df_train, embedding, vector_db, k), 2))
+        print(metrics["hit@k"][-1])
+        print("Calculating recall@k...", end = ' ')
+        metrics["recall@k"].append(round(recall_k(file_clb_proptit, df_train, embedding, vector_db, k), 2))
+        print(metrics["recall@k"][-1])
+        print("Calculating precision@k...", end = ' ')
+        metrics["precision@k"].append(round(precision_k(file_clb_proptit, df_train, embedding, vector_db, k), 2))
+        print(metrics["precision@k"][-1])
+        print("Calculating f1@k...", end = ' ')
+        metrics["f1@k"].append(round(f1_k(file_clb_proptit, df_train, embedding, vector_db, k), 2))
+        print(metrics["f1@k"][-1])
+        print("Calculating map@k...", end = ' ')
+        metrics["map@k"].append(round(map_k(file_clb_proptit, df_train, embedding, vector_db, k), 2))
+        print(metrics["map@k"][-1])
+        print("Calculating mrr@k...", end = ' ')
+        metrics["mrr@k"].append(round(mrr_k(file_clb_proptit, df_train, embedding, vector_db, k), 2))
+        print(metrics["mrr@k"][-1])
+        print("Calculating ndcg@k...", end = ' ')
+        metrics["ndcg@k"].append(round(ndcg_k(file_clb_proptit, df_train, embedding, vector_db, k), 2))
+        print(metrics["ndcg@k"][-1])
+        print("Calculating context_precision@k...", end = ' ')
+        metrics["context_precision@k"].append(round(context_precision_k(file_clb_proptit, df_train, embedding, vector_db, k), 2))
+        print(metrics["context_precision@k"][-1])
+        print("Calculating context_recall@k...", end = ' ')
+        metrics["context_recall@k"].append(round(context_recall_k(file_clb_proptit, df_train, embedding, vector_db, k), 2))
+        print(metrics["context_recall@k"][-1])
+        print("Calculating context_entities_recall@k...", end = ' ')
+        metrics["context_entities_recall@k"].append(round(context_entities_recall_k(file_clb_proptit, df_train, embedding, vector_db, k), 2))
+        print(metrics["context_entities_recall@k"][-1])
+    
+    print('#' * 50)
+    # Chuyển đổi metrics thành DataFrame
+    metrics_df = pd.DataFrame(metrics)
+    # Lưu DataFrame vào file csv
+    if train:
+        metrics_df.to_csv("metrics_retrieval_train.csv", index=False)
+    else:
+        metrics_df.to_csv("metrics_retrieval_test.csv", index=False)
+    return metrics_df
